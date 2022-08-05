@@ -11,21 +11,22 @@ const connectivityHT = new Map();
 
 
 var coordinateDataURL = "https://raw.githubusercontent.com/AlexLim-Pro/SWOF_Sample_Data/main/data/coords_San_Guad.csv";
-// var riverShapeDataURL = "https://github.com/AlexLim-Pro/SWOF_Sample_Data/raw/main/data/NHDFlowline_San_Guad/NHDFlowline_San_Guad.shp"
-// var riverShapeDataFilePath = `${document.currentScript.src}/../data/NHDFlowline_San_Guad/NHDFlowline_San_Guad.shp`;
-var riverShapeDataFilePath = `${document.currentScript.src}/../data/NHDFlowline_San_Guad.json`;
+var riverShapeDataFilePath = "./assets/NHDFlowline_San_Guad/NHDFlowline_San_Guad.shp";
 var riverShapeDataFileSHA = "832082317a9254ee1ccdb92786937cb343dff014";
-var riverShapeDataURL = `https://api.github.com/repos/AlexLim-Pro/SWOF_Sample_Data/git/blobs/${riverShapeDataFileSHA}`
+var riverShapeDataURL = `https://api.github.com/repos/AlexLim-Pro/SWOF_Sample_Data/git/blobs/${riverShapeDataFileSHA}`;
 var riverConnectivityURL = "https://raw.githubusercontent.com/AlexLim-Pro/SWOF_Sample_Data/main/data/rapid_connect_San_Guad.csv";
 var riverConnectivityPath = "data/rapid_connect_San_Guad.csv";
 var riverFlowDataFileSHA = "c70811eb578bab8374d797b5d4f081f639f7d5c5";
-var riverFlowDataURL = `https://api.github.com/repos/AlexLim-Pro/SWOF_Sample_Data/git/blobs/${riverFlowDataFileSHA}`
+var riverFlowDataURL = `https://api.github.com/repos/AlexLim-Pro/SWOF_Sample_Data/git/blobs/${riverFlowDataFileSHA}`;
+var rividURL = "https://raw.githubusercontent.com/AlexLim-Pro/SWOF_Sample_Data/main/data/rivid.csv";
+var QoutURL = "file:///Users/alexlim/Desktop/JPL/DataToDiscovery/RIVERS/SWOF/assets/Qout.csv"
 
 
 var riverShapeData;
 var riverFlowData;
 
 
+var canvas;
 var mapBuffer;
 var rightBuffer;
 
@@ -48,12 +49,14 @@ var selectedPointId = 0;
 var downstreamPoints = [];
 var knowDownstreamPoints = false;
 
+var rivids = [];
 
-var numCoords = 0;
 
 var coordsLoaded = false;
 var riverShapeLoaded = false;
 var riverFlowLoaded = false;
+var rividLoaded = false;
+
 var orientedMap = false;
 
 var firstTime = true;
@@ -91,6 +94,7 @@ function preload() {
     loadRiverShape();
     loadRiverFlow();
     loadConnectivity();
+    loadRivid();
     backgroundColor = arrayToColor(backgroundColor);
     defaultContrastColor = arrayToColor(defaultContrastColor);
     pointShowColor = arrayToColor(defaultPointColor, defaultShownAlpha);
@@ -112,8 +116,7 @@ function loadCoords() {
             fetch(coordinateDataURL)
             .then(res => res.text())
             .then(text => {
-                textArr = text.split("\n");
-                numCoords = textArr.length;
+                let textArr = text.split("\n");
                 for(let i = 0; i < textArr.length; i++) {
                     let rowArr = textArr[i].split(",");
                     coordsHT.set(parseInt(rowArr[0]), [parseFloat(rowArr[1]), parseFloat(rowArr[2])]);
@@ -147,22 +150,54 @@ function loadRiverShape() {
  * Loads the river flow data into the sketch.
  */
  function loadRiverFlow() {
+    // return new Promise((resolve, reject) => {
+    //     setTimeout(() => {
+    //         fetch(QoutURL)
+    //         .then((res) => res.json())
+    //         // .then((data) => atob(data.content))
+    //         .then((data) => {
+    //             console.log("data");
+    //             console.log(atob(data.content));
+    //             // riverShapeData = JSON.parse(data);
+    //             // let reader = new NetCDFReader(data.content);;
+    //             // console.log(data.content);
+    //             riverFlowLoaded = true;
+    //         });
+    //         resolve();
+    //         });
+    //     }, 5000);
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            fetch(riverFlowDataURL)
-            .then((res) => res.json())
-            // .then((data) => atob(data.content))
-            .then((data) => {
-                console.log("data");
-                console.log(atob(data.content));
-                // riverShapeData = JSON.parse(data);
-                // let reader = new NetCDFReader(data.content);;
-                // console.log(data.content);
+            fetch("./assets/Qout.csv", {
+                method: "GET",
+                mode: "no-cors",
+            })
+            .then((res) => res.text())
+            .then(text => {
+                console.log("done");
+                console.log(text);
                 riverFlowLoaded = true;
-            });
-            resolve();
+                resolve();
             });
         }, 5000);
+    });
+}
+
+/**
+ * Loads the rivids for the river flows in the sketch.
+ */
+ function loadRivid() {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            fetch(rividURL)
+            .then(res => res.text())
+            .then(text => {
+                rivids = text.split(",");
+                rividLoaded = true;
+                resolve();
+            });
+        }, 5000);
+    });
 }
 
 /**
@@ -174,8 +209,7 @@ function loadRiverShape() {
             fetch(riverConnectivityURL)
             .then(res => res.text())
             .then(text => {
-                textArr = text.split("\n");
-                numCoords = textArr.length;
+                let textArr = text.split("\n");
                 for(let i = 0; i < textArr.length; i++) {
                     let rowArr = textArr[i].split(",");
                     connectivityHT.set(parseInt(rowArr[0]), parseInt(rowArr[1]));
@@ -225,6 +259,9 @@ function draw() {
     // text(`(${mouseX}, ${mouseY})`, mouseX, mouseY);
     image(mapBuffer, 0, 0);
     image(rightBuffer, MAX_LONGITUDE * 2 * xScale / 2, MAX_LATITUDE * 2 * yScale)
+    if(knowDownstreamPoints) {  // TODO: optimize this so it doesn't have to be done every frame
+        noLoop();
+    }
 }
 
 /**
@@ -264,7 +301,6 @@ function drawEllipses() {
                 // // console.log()
                 // doTransformations();
                 // // console.log("Second:", mouseX, mouseY)
-                // // console.log(temp)
                 }
                 catch(e) {
                     if(SHOW_ERRORS) {
@@ -312,6 +348,7 @@ function drawEllipses() {
             mapBuffer.stroke(c);
             mapBuffer.fill(c);
             smooth();
+            // mapBuffer.translate(MAX_LONGITUDE * xScale, MAX_LATITUDE * yScale);
             mapBuffer.ellipse(canvasCoords[0], canvasCoords[1], POINT_RADIUS, POINT_RADIUS);
         });
         if(dSmallest != Infinity) {
@@ -372,7 +409,7 @@ async function drawLines() {
             let i = 0;
             // totalCoords += feature["geometry"]["coordinates"].length;
             feature["geometry"]["coordinates"].forEach((coordinate) => {
-                if(i % 5 != 0 && i < feature["geometry"]["coordinates"].length - 2) {
+                if(i % 10 != 0 && i < feature["geometry"]["coordinates"].length - 2) {
                     i++;
                     return;
                 }
@@ -439,7 +476,10 @@ window.addEventListener("resize", function() {
  * @returns {[number, number]} The point on the canvas map.
  */
 function coordsToCanvas(lng = 0, lat = 0) {
-    return [(lng - firstX) * xScale * VIEW_SCALE, (firstY - lat) * yScale * VIEW_SCALE];
+    // mapBuffer.translate(MAX_LONGITUDE * xScale, MAX_LATITUDE * yScale);
+    // mapBuffer.translate(controls.view.x, controls.view.y);
+    return [(lng - firstX) * xScale * VIEW_SCALE + controls.view.x,
+            (firstY - lat) * yScale * VIEW_SCALE + controls.view.y];
 }
 
 /**
@@ -449,7 +489,8 @@ function coordsToCanvas(lng = 0, lat = 0) {
  * @returns {[number, number]} The longitude and latitude in degrees.
  */
 function canvasToCoords(x = 0, y = 0) {
-    return [x / (xScale * VIEW_SCALE) + firstX, y / (yScale * VIEW_SCALE) + firstY];
+    return [(x - controls.view.x) / (xScale * VIEW_SCALE) + firstX,
+            (y - controls.view.y) / (yScale * VIEW_SCALE) + firstY];
 }
 
 /**
@@ -485,9 +526,9 @@ function canvasToCoords(x = 0, y = 0) {
  * Performs map transformations.
  */
 function doTransformations() {
-    mapBuffer.translate(controls.view.x, controls.view.y);
-    mapBuffer.scale(controls.view.zoom);
-    mapBuffer.translate(MAX_LONGITUDE * xScale, MAX_LATITUDE * yScale);
+    // mapBuffer.translate(controls.view.x, controls.view.y);
+    // mapBuffer.scale(controls.view.zoom);
+    // mapBuffer.translate(MAX_LONGITUDE * xScale, MAX_LATITUDE * yScale);
     // scale(1, -1);
 }
 
@@ -496,9 +537,9 @@ function doTransformations() {
  */
 function undoTransformations() {
     // scale(1, -1);
-    mapBuffer.translate(-MAX_LONGITUDE * xScale, -MAX_LATITUDE * yScale);
-    mapBuffer.scale(1 / controls.view.zoom);
-    mapBuffer.translate(-controls.view.x, -controls.view.y);
+    // mapBuffer.translate(-MAX_LONGITUDE * xScale, -MAX_LATITUDE * yScale);
+    // mapBuffer.scale(1 / controls.view.zoom);
+    // mapBuffer.translate(-controls.view.x, -controls.view.y);
 }
 
 
